@@ -20,6 +20,7 @@ interface ClassData {
   admin_latitude: number | null;
   admin_longitude: number | null;
   current_week: number | null;
+  advanced_verification: boolean | null;
 }
 
 const Index = () => {
@@ -41,18 +42,19 @@ const Index = () => {
     setIsVerifying(true);
     try {
       const { data, error } = await supabase
-        .from("classes")
-        .select("id, name, weeks_count, attendance_duration_minutes, attendance_started_at, admin_latitude, admin_longitude, current_week")
+        .from("classes" as any)
+        .select("id, name, weeks_count, attendance_duration_minutes, attendance_started_at, admin_latitude, admin_longitude, current_week, advanced_verification")
         .eq("code", attendanceCode)
         .maybeSingle();
 
       if (error) throw error;
 
       if (data) {
+        const classData = data as any;
         // Check if attendance is still active
-        if (data.attendance_started_at && data.attendance_duration_minutes) {
-          const startTime = new Date(data.attendance_started_at).getTime();
-          const endTime = startTime + data.attendance_duration_minutes * 60 * 1000;
+        if (classData.attendance_started_at && classData.attendance_duration_minutes) {
+          const startTime = new Date(classData.attendance_started_at).getTime();
+          const endTime = startTime + classData.attendance_duration_minutes * 60 * 1000;
           
           if (Date.now() > endTime) {
             toast.error("Mã điểm danh đã hết hiệu lực! Vui lòng liên hệ giảng viên.");
@@ -61,24 +63,24 @@ const Index = () => {
         }
         
         // Check GPS if admin location is set
-        if (data.admin_latitude && data.admin_longitude) {
+        if (classData.admin_latitude && classData.admin_longitude) {
           setIsCheckingGPS(true);
           try {
             toast.info("Đang xác minh vị trí của bạn...");
             const userPosition = await getAveragePosition();
             
             const distance = calculateDistance(
-              data.admin_latitude,
-              data.admin_longitude,
+              classData.admin_latitude,
+              classData.admin_longitude,
               userPosition.latitude,
               userPosition.longitude
             );
             
-            // Max distance: 350m (between 300-400m)
-            const MAX_DISTANCE = 350;
+            // Max distance: 300m radius from admin location
+            const MAX_DISTANCE = 300;
             
             if (distance > MAX_DISTANCE) {
-              toast.error(`Bạn không ở gần giảng viên (cách ${Math.round(distance)}m). Vui lòng di chuyển lại gần và thử lại!`);
+              toast.error(`Bạn ở ngoài phạm vi cho phép (cách ${Math.round(distance)}m, yêu cầu trong ${MAX_DISTANCE}m). Vui lòng di chuyển lại gần và thử lại!`);
               return;
             }
             
@@ -93,8 +95,8 @@ const Index = () => {
           }
         }
         
-        setVerifiedClass(data);
-        toast.success(`Đã tìm thấy lớp: ${data.name}`);
+        setVerifiedClass(classData);
+        toast.success(`Đã tìm thấy lớp: ${classData.name}`);
       } else {
         toast.error("Mã điểm danh không tồn tại!");
       }
